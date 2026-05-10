@@ -1,0 +1,474 @@
+{
+  "datasets": [
+    {
+      "name": "2fc3c11b",
+      "displayName": "Active Users by Region",
+      "queryLines": [
+        "SELECT\n",
+        "  d.full_date AS order_date,\n",
+        "  c.region,\n",
+        "  COUNT(DISTINCT f.cust_key) AS active_users\n",
+        "FROM\n",
+        "  workspace.gold.fact_orders f\n",
+        "    JOIN workspace.gold.dim_date d\n",
+        "      ON f.date_key = d.date_key\n",
+        "    JOIN workspace.gold.dim_customer c\n",
+        "      ON f.cust_key = c.cust_key\n",
+        "GROUP BY\n",
+        "  d.full_date,\n",
+        "  c.region\n",
+        "ORDER BY\n",
+        "  d.full_date,\n",
+        "  c.region"
+      ]
+    },
+    {
+      "name": "sweet_category",
+      "displayName": "Sweet Category Metrics",
+      "queryLines": [
+        "SELECT\n",
+        "  d.year,\n",
+        "  d.month_name,\n",
+        "  p.top_category,\n",
+        "  COUNT(DISTINCT f.order_id) AS order_count,\n",
+        "  SUM(f.quantity) AS total_quantity,\n",
+        "  ROUND(SUM(f.revenue_usd), 2) AS total_revenue_usd\n",
+        "FROM\n",
+        "  workspace.gold.fact_orders f\n",
+        "    JOIN workspace.gold.dim_date d\n",
+        "      ON f.date_key = d.date_key\n",
+        "    JOIN workspace.gold.dim_product p\n",
+        "      ON f.prod_key = p.prod_key\n",
+        "WHERE\n",
+        "  LOWER(p.top_category) = 'sweet'\n",
+        "GROUP BY\n",
+        "  d.year,\n",
+        "  d.month_name,\n",
+        "  d.month,\n",
+        "  p.top_category\n",
+        "ORDER BY\n",
+        "  d.year,\n",
+        "  d.month"
+      ]
+    },
+    {
+      "name": "fba3a792",
+      "displayName": "Top Products by Region",
+      "queryLines": [
+        "WITH ranked AS (\n",
+        "  SELECT\n",
+        "    c.region,\n",
+        "    p.prod_name,\n",
+        "    p.top_category,\n",
+        "    ROUND(SUM(f.revenue_usd), 2) AS total_revenue_usd,\n",
+        "    RANK() OVER (PARTITION BY c.region ORDER BY SUM(f.revenue_usd) DESC) AS revenue_rank\n",
+        "  FROM\n",
+        "    workspace.gold.fact_orders f\n",
+        "      JOIN workspace.gold.dim_customer c\n",
+        "        ON f.cust_key = c.cust_key\n",
+        "      JOIN workspace.gold.dim_product p\n",
+        "        ON f.prod_key = p.prod_key\n",
+        "  GROUP BY\n",
+        "    c.region,\n",
+        "    p.prod_name,\n",
+        "    p.top_category\n",
+        ")\n",
+        "SELECT\n",
+        "  region,\n",
+        "  revenue_rank,\n",
+        "  prod_name,\n",
+        "  top_category,\n",
+        "  total_revenue_usd\n",
+        "FROM\n",
+        "  ranked\n",
+        "WHERE\n",
+        "  revenue_rank <= 3\n",
+        "ORDER BY\n",
+        "  region,\n",
+        "  revenue_rank"
+      ]
+    },
+    {
+      "name": "4384e9a5",
+      "displayName": "CLV",
+      "queryLines": [
+        "SELECT\n",
+        "  c.cust_key,\n",
+        "  c.region,\n",
+        "  c.customer_type,\n",
+        "  CASE\n",
+        "    WHEN c.is_active THEN 'active'\n",
+        "    ELSE 'inactive'\n",
+        "  END AS customer_status,\n",
+        "  COUNT(DISTINCT f.order_id) AS total_orders,\n",
+        "  SUM(f.quantity) AS total_units,\n",
+        "  ROUND(SUM(f.revenue_usd), 2) AS lifetime_revenue_usd,\n",
+        "  ROUND(AVG(f.revenue_usd), 2) AS avg_order_line_value_usd,\n",
+        "  ROUND(DATEDIFF(CURRENT_DATE(), MIN(d.full_date)) / 30.0, 1) AS tenure_months\n",
+        "FROM\n",
+        "  workspace.gold.dim_customer c\n",
+        "    LEFT JOIN workspace.gold.fact_orders f\n",
+        "      ON c.cust_key = f.cust_key\n",
+        "    LEFT JOIN workspace.gold.dim_date d\n",
+        "      ON f.date_key = d.date_key\n",
+        "GROUP BY\n",
+        "  c.cust_key,\n",
+        "  c.region,\n",
+        "  c.customer_type,\n",
+        "  c.is_active\n",
+        "ORDER BY\n",
+        "  lifetime_revenue_usd DESC"
+      ]
+    },
+    {
+      "name": "8f1d2012",
+      "displayName": "Data Quality Audit",
+      "queryLines": [
+        "SELECT\n",
+        "  'multi_line_order' AS flag_type,\n",
+        "  order_id,\n",
+        "  COUNT(*) AS line_count,\n",
+        "  COLLECT_SET(prod_key) AS prod_keys,\n",
+        "  ROUND(SUM(revenue_usd), 2) AS total_revenue_usd,\n",
+        "  NULL AS error_reason\n",
+        "FROM\n",
+        "  workspace.gold.fact_orders\n",
+        "GROUP BY\n",
+        "  order_id\n",
+        "HAVING\n",
+        "  COUNT(*) > 1\n",
+        "UNION ALL\n",
+        "SELECT\n",
+        "  _error_code AS flag_type,\n",
+        "  order_id,\n",
+        "  1 AS line_count,\n",
+        "  NULL AS prod_keys,\n",
+        "  NULL AS total_revenue_usd,\n",
+        "  _error_message AS error_reason\n",
+        "FROM\n",
+        "  workspace.error_tables.err_orders\n",
+        "ORDER BY\n",
+        "  flag_type,\n",
+        "  order_id"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "17f423fd",
+      "displayName": "Untitled page",
+      "layout": [
+        {
+          "widget": {
+            "name": "dau_by_region_chart",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2fc3c11b",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "order_date",
+                      "expression": "`order_date`"
+                    },
+                    {
+                      "name": "active_users",
+                      "expression": "`active_users`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "showTitle": true,
+                "title": "DAU by Region"
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "order_date",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "active_users",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "region",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "sweet_revenue_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sweet_category",
+                  "fields": [
+                    {
+                      "name": "sum(total_revenue_usd)",
+                      "expression": "SUM(`total_revenue_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Total Revenue (Sweet)",
+                "contentAlignment": "center"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(total_revenue_usd)"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "sweet_quantity_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sweet_category",
+                  "fields": [
+                    {
+                      "name": "sum(total_quantity)",
+                      "expression": "SUM(`total_quantity`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Total Quantity (Sweet)",
+                "contentAlignment": "center"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(total_quantity)"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 6,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "top_products_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "fba3a792",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "revenue_rank",
+                      "expression": "`revenue_rank`"
+                    },
+                    {
+                      "name": "prod_name",
+                      "expression": "`prod_name`"
+                    },
+                    {
+                      "name": "top_category",
+                      "expression": "`top_category`"
+                    },
+                    {
+                      "name": "total_revenue_usd",
+                      "expression": "`total_revenue_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Top 3 Products by Region"
+              },
+              "rowsPerPage": 25,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "region"
+                  },
+                  {
+                    "fieldName": "revenue_rank",
+                    "displayName": "Rank"
+                  },
+                  {
+                    "fieldName": "prod_name",
+                    "displayName": "Product Name"
+                  },
+                  {
+                    "fieldName": "top_category",
+                    "displayName": "Category"
+                  },
+                  {
+                    "fieldName": "total_revenue_usd",
+                    "format": {
+                      "type": "number-currency",
+                      "currencyCode": "USD",
+                      "abbreviation": "compact"
+                    },
+                    "displayName": "Revenue (USD)"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "clv_scatter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "4384e9a5",
+                  "fields": [
+                    {
+                      "name": "customer_status",
+                      "expression": "`customer_status`"
+                    },
+                    {
+                      "name": "tenure_months",
+                      "expression": "`tenure_months`"
+                    },
+                    {
+                      "name": "lifetime_revenue_usd",
+                      "expression": "`lifetime_revenue_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "CLV Analysis"
+              },
+              "version": 3,
+              "mark": {
+                "opacity": 0.7,
+                "size": 2
+              },
+              "widgetType": "scatter",
+              "encodings": {
+                "x": {
+                  "fieldName": "tenure_months",
+                  "displayName": "Tenure (Months)",
+                  "scale": {
+                    "type": "quantitative",
+                    "domain": {
+                      "min": 80,
+                      "max": 100
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "lifetime_revenue_usd",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "USD",
+                    "abbreviation": "compact"
+                  },
+                  "displayName": "Lifetime Revenue",
+                  "scale": {
+                    "type": "quantitative",
+                    "domain": {
+                      "min": 0,
+                      "max": 4000
+                    }
+                  }
+                },
+                "color": {
+                  "fieldName": "customer_status",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 12,
+            "height": 7
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
