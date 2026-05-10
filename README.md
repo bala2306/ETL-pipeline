@@ -55,8 +55,8 @@ Raw Files → Bronze (raw) → Silver (cleaned) → Gold (star schema) → Dashb
 ## Data Quality Decisions
 
 **Quarantined (3 rows → error table)**
-- `A-21`, `A-22` — no customer ID, cannot attribute to any region
-- `A-013` — quantity is 0.1, rounding would fabricate revenue
+- `A-21`, `A-22` - no customer ID, cannot attribute to any region
+- `A-013` - quantity is 0.1, rounding would fabricate revenue
 
 **Fixed inline**
 - Customer dedup → keep latest snapshot per customer
@@ -69,11 +69,11 @@ Raw Files → Bronze (raw) → Silver (cleaned) → Gold (star schema) → Dashb
 
 ## Business Metrics (Dashboard)
 
-1. **Daily Active Users by Region** — unique customers per day, by region
-2. **Sweet Category** — total revenue ($981.61), orders (8), quantity (27)
-3. **Top 3 Products by Region** — ranked by revenue using `RANK()` window function
-4. **Customer Lifetime Value** — total revenue per customer, active vs inactive
-5. **Data Quality Audit** — quarantined rows + multi-line orders in one view
+1. **Daily Active Users by Region** - unique customers per day, by region
+2. **Sweet Category** - total revenue ($981.61), orders (8), quantity (27)
+3. **Top 3 Products by Region** - ranked by revenue using `RANK()` window function
+4. **Customer Lifetime Value** - total revenue per customer, active vs inactive
+5. **Data Quality Audit** - quarantined rows + multi-line orders in one view
 
 ---
 
